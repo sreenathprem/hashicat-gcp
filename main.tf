@@ -7,6 +7,10 @@ terraform {
       source  = "hashicorp/google"
       version = "=3.68.0"
     }
+    hcp = {
+      source  = "hashicorp/hcp"
+      version = "0.82.0"
+    }
   }
 }
 
@@ -15,6 +19,20 @@ provider "google" {
   region  = var.region
 }
 
+# Get Image Info from HCP Packer
+data "hcp_packer_version" "ubuntu" {
+  bucket_name  = "dbag-debian-tfe-base"
+  channel_name = "development"
+}
+
+data "hcp_packer_artifact" "ubuntu_europe_west3" {
+  bucket_name         = "dbag-debian-tfe-base"
+  platform            = "gce"
+  version_fingerprint = data.hcp_packer_version.ubuntu.fingerprint
+  region              = "europe-west3-a"
+}
+
+# Create GCP Instances
 resource "google_compute_network" "hashicat" {
   name                    = "${var.prefix}-vpc-${var.region}"
   auto_create_subnetworks = false
@@ -47,12 +65,12 @@ resource "tls_private_key" "ssh-key" {
 
 resource "google_compute_instance" "hashicat" {
   name         = "${var.prefix}-hashicat"
-  zone         = "${var.region}-b"
+  zone         = var.zone
   machine_type = var.machine_type
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2204-lts"
+      image = data.hcp_packer_artifact.ubuntu_europe_west3.external_identifier
     }
   }
 
